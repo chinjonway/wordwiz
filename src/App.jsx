@@ -184,37 +184,10 @@ function calcScore(correct, timeTaken) {
 async function generateQuestions(seed) {
   const assignments = pickTopics(NUM_QUESTIONS);
 
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+  const res = await fetch("/api/generate-questions", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": import.meta.env.VITE_ANTHROPIC_API_KEY,
-      "anthropic-version": "2023-06-01",
-      "anthropic-dangerous-direct-browser-access": "true",
-    },
-    body: JSON.stringify({
-      model: "claude-haiku-4-5-20251001",
-      max_tokens: 2500,
-      system: `You create language quiz questions for children aged 8–10 years old.
-Return ONLY a valid JSON array of exactly ${NUM_QUESTIONS} objects. No markdown, no extra text.
-Each object must have: { "question": string, "answers": [4 strings], "correct": 0-3, "emoji": string, "lang": string, "skill": string }
-
-ASSIGNMENTS — each question must test EXACTLY the assigned language and skill:
-${assignments.map((a, i) => `Q${i + 1}: Language=${a.lang}, Skill="${a.topic}"`).join("\n")}
-
-RULES:
-- The "lang" field must be one of: "English", "Malay", "Chinese"
-- The "skill" field should be a SHORT label like "Vocabulary", "Grammar", "Spelling", "Antonym", etc.
-- Write the question and all 4 answers in the TARGET LANGUAGE (e.g. Malay question in Malay, Chinese question in Chinese)
-- Questions must be appropriate for 8–10 year old children — not too hard, not too easy
-- All 4 answer choices must be plausible (no obviously silly wrong answers)
-- Vary question formats: fill-in-the-blank, "which word means...", "choose the correct sentence", "what is the opposite of...", etc.
-- For Chinese: use Simplified Chinese characters, include pinyin in parentheses if helpful
-- For Malay: use standard Bahasa Malaysia
-- UNIQUENESS SEED: ${seed} — ensure completely fresh, non-repeating questions every call
-- NEVER ask the same question twice. Use creative, specific, targeted examples.`,
-      messages: [{ role: "user", content: `Seed: ${seed}. Generate all ${NUM_QUESTIONS} language questions now. JSON array only.` }],
-    }),
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ seed, assignments }),
   });
 
   if (!res.ok) {
@@ -223,15 +196,8 @@ RULES:
     throw new Error(`API ${res.status}: ${body.slice(0, 200)}`);
   }
   const data = await res.json();
-  if (data.error) throw new Error(`API error: ${data.error.message}`);
-  const text = data.content?.find(b => b.type === "text")?.text || "";
-  if (!text) throw new Error("Empty response from API");
-  let qs;
-  try {
-    qs = JSON.parse(text.replace(/```json|```/g, "").trim());
-  } catch (e) {
-    throw new Error(`JSON parse failed: ${text.slice(0, 100)}`);
-  }
+  if (data.error) throw new Error(`API error: ${data.error}`);
+  const qs = data.questions;
   if (!Array.isArray(qs) || qs.length === 0) throw new Error("No questions in response");
   return qs.map((q, i) => ({ ...q, id: i + 1 }));
 }
